@@ -39,11 +39,8 @@ jobs:
           for IMAGE in $IMAGES; do
             echo "Processing $IMAGE"
 
-            # Extract image name without registry path
-            IMAGE_NAME=$(echo $IMAGE | awk -F'/' '{print $NF}')
-
             # Construct target image name
-            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME"
+            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/${IMAGE##*/}"
 
             echo "Source Image: $IMAGE"
             echo "Target Image: $TARGET_IMAGE"
