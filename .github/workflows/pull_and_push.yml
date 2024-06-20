@@ -27,8 +27,8 @@ jobs:
         id: read-images
         run: |
           if [ -f images.txt ]; then
-            cat images.txt
-            echo "IMAGES=$(cat images.txt | tr '\n' ' ')" >> $GITHUB_ENV
+            IMAGES=$(cat images.txt | tr '\n' ' ')
+            echo "IMAGES=$IMAGES" >> $GITHUB_ENV
           else
             echo "No images.txt found!"
             exit 1
@@ -39,8 +39,11 @@ jobs:
           for IMAGE in $IMAGES; do
             echo "Processing $IMAGE"
 
+            # Extract image name without registry path
+            IMAGE_NAME=$(echo $IMAGE | awk -F'/' '{print $NF}')
+
             # Construct target image name
-            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/${IMAGE##*/}"
+            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME"
 
             echo "Source Image: $IMAGE"
             echo "Target Image: $TARGET_IMAGE"
@@ -48,7 +51,9 @@ jobs:
             # Check if target image exists
             if ! docker manifest inspect $TARGET_IMAGE > /dev/null 2>&1; then
               echo "Target image $TARGET_IMAGE does not exist, pushing first..."
-              docker buildx build --pull -t $TARGET_IMAGE --push $IMAGE
+              docker pull $IMAGE
+              docker tag $IMAGE $TARGET_IMAGE
+              docker push $TARGET_IMAGE
             else
               echo "Target image $TARGET_IMAGE exists, comparing architectures..."
               # Inspect source image architectures
