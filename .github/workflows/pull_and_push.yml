@@ -19,12 +19,6 @@ jobs:
         with:
           install: true
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Read images list
         id: read-images
         run: |
@@ -57,6 +51,8 @@ jobs:
             # Check if target image exists
             if ! docker manifest inspect $TARGET_IMAGE > /dev/null 2>&1; then
               echo "Target image $TARGET_IMAGE does not exist, pushing first..."
+              # Log in to Docker Hub for pushing
+              echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
               docker pull $IMAGE
               docker tag $IMAGE $TARGET_IMAGE
               docker push $TARGET_IMAGE
@@ -73,6 +69,8 @@ jobs:
                 echo "Architectures match for $IMAGE"
               else
                 echo "Architectures do not match for $IMAGE, updating..."
+                # Log in to Docker Hub for pushing
+                echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
                 # Pull all architectures of the source image
                 docker buildx imagetools create --tag temp/$IMAGE_NAME $IMAGE
 
