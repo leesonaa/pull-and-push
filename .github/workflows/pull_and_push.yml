@@ -1,13 +1,13 @@
-name: Sync Multi-Architecture Image
+name: Sync Multi-Architecture Images
 on:
-  #push:
-  #  branches:
-  #    - main
+  push:
+    branches:
+      - main  # 根据需要调整触发分支
   schedule:
-    - cron: '0 16 * * *'  # 每天 00:00 UTC 执行一次
+    - cron: '0 16 * * *'  # 每天 16:00 UTC 执行一次，即中国时间凌晨 0 点
 
 jobs:
-  sync-image:
+  sync-images:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,33 +23,43 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Inspect source image architectures
-        id: source-inspect
+      - name: Read images list
+        id: read-images
         run: |
-          docker buildx imagetools inspect ghcr.io/imagegenius/immich:latest > source_inspect.txt
-          cat source_inspect.txt
-
-      - name: Inspect target image architectures
-        id: target-inspect
-        run: |
-          docker buildx imagetools inspect ${{ secrets.DOCKER_USERNAME }}/immich:latest > target_inspect.txt || echo "Target image not found"
-          cat target_inspect.txt
-
-      - name: Compare source and target image architectures
-        id: compare-images
-        run: |
-          if diff source_inspect.txt target_inspect.txt > /dev/null; then
-            echo "Architectures match"
-            echo "match=true" >> $GITHUB_ENV
+          if [ -f images.txt ]; then
+            cat images.txt
+            echo "IMAGES=$(cat images.txt | tr '\n' ' ')" >> $GITHUB_ENV
           else
-            echo "Architectures do not match"
-            echo "match=false" >> $GITHUB_ENV
+            echo "No images.txt found!"
+            exit 1
           fi
 
-      - name: Pull and push multi-architecture image if needed
-        if: env.match == 'false'
+      - name: Process each image
         run: |
-          echo "Pulling and pushing multi-architecture image"
-          docker buildx imagetools create \
-            --tag ${{ secrets.DOCKER_USERNAME }}/immich:latest \
-            ghcr.io/imagegenius/immich:latest
+          for IMAGE in $IMAGES; do
+            echo "Processing $IMAGE"
+
+            # Extract image name without registry path
+            IMAGE_NAME=$(echo $IMAGE | awk -F'/' '{print $NF}')
+
+            # Construct target image name
+            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME"
+
+            echo "Source Image: $IMAGE"
+            echo "Target Image: $TARGET_IMAGE"
+
+            # Inspect source image architectures
+            docker buildx imagetools inspect $IMAGE > source_inspect.txt
+
+            # Inspect target image architectures (if exists)
+            docker buildx imagetools inspect $TARGET_IMAGE > target_inspect.txt || echo "Target image not found"
+
+            # Compare architectures
+            if diff source_inspect.txt target_inspect.txt > /dev/null; then
+              echo "Architectures match for $IMAGE"
+            else
+              echo "Architectures do not match for $IMAGE, updating..."
+              # Pull and push multi-architecture image
+              docker buildx build --pull -t $TARGET_IMAGE --push $IMAGE
+            fi
+          done

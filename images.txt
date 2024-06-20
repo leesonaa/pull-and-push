@@ -1,0 +1,5 @@
+linuxserver/qbittorrent
+linuxserver/transmission
+linuxserver/plex
+linuxserver/emby
+ghcr.io/imagegenius/immich
