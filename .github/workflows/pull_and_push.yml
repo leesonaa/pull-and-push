@@ -48,18 +48,25 @@ jobs:
             echo "Source Image: $IMAGE"
             echo "Target Image: $TARGET_IMAGE"
 
-            # Inspect source image architectures
-            docker buildx imagetools inspect $IMAGE > source_inspect.txt
-
-            # Inspect target image architectures (if exists)
-            docker buildx imagetools inspect $TARGET_IMAGE > target_inspect.txt || echo "Target image not found"
-
-            # Compare architectures
-            if diff source_inspect.txt target_inspect.txt > /dev/null; then
-              echo "Architectures match for $IMAGE"
-            else
-              echo "Architectures do not match for $IMAGE, updating..."
-              # Pull and push multi-architecture image
+            # Check if target image exists
+            if ! docker manifest inspect $TARGET_IMAGE > /dev/null 2>&1; then
+              echo "Target image $TARGET_IMAGE does not exist, pushing first..."
               docker buildx build --pull -t $TARGET_IMAGE --push $IMAGE
+            else
+              echo "Target image $TARGET_IMAGE exists, comparing architectures..."
+              # Inspect source image architectures
+              docker buildx imagetools inspect $IMAGE > source_inspect.txt
+
+              # Inspect target image architectures
+              docker buildx imagetools inspect $TARGET_IMAGE > target_inspect.txt
+
+              # Compare architectures
+              if diff source_inspect.txt target_inspect.txt > /dev/null; then
+                echo "Architectures match for $IMAGE"
+              else
+                echo "Architectures do not match for $IMAGE, updating..."
+                # Pull and push multi-architecture image
+                docker buildx build --pull -t $TARGET_IMAGE --push $IMAGE
+              fi
             fi
           done
