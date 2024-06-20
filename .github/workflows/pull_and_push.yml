@@ -16,6 +16,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+        with:
+          install: true
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
@@ -73,4 +75,14 @@ jobs:
                 docker push $TARGET_IMAGE
               fi
             fi
+          done
+
+      - name: Push multi-architecture manifest
+        run: |
+          for IMAGE in $IMAGES; do
+            IMAGE_NAME=$(echo $IMAGE | awk -F'/' '{print $NF}')
+            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME"
+
+            echo "Creating and pushing manifest for $TARGET_IMAGE"
+            docker buildx imagetools create --tag $TARGET_IMAGE $TARGET_IMAGE
           done
