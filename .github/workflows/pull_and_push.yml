@@ -1,13 +1,11 @@
-name: Sync Multi-Architecture Images
+name: Sync Multi-Architecture Image
 on:
   push:
     branches:
-      - main  # 根据需要调整触发分支
-  schedule:
-    - cron: '0 16 * * *'  # 每天 16:00 UTC 执行一次，即中国时间凌晨 0 点
+      - main 
 
 jobs:
-  sync-images:
+  sync-image:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,77 +14,37 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
         with:
-          install: true
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Read images list
-        id: read-images
+      - name: Inspect source image architectures
+        id: source-inspect
         run: |
-          if [ -f images.txt ]; then
-            IMAGES=$(cat images.txt | tr '\n' ' ')
-            echo "IMAGES=$IMAGES" >> $GITHUB_ENV
+          docker buildx imagetools inspect ghcr.io/imagegenius/immich:latest > source_inspect.txt
+          cat source_inspect.txt
+      - name: Inspect target image architectures
+        id: target-inspect
+        run: |
+          docker buildx imagetools inspect ${{ secrets.DOCKER_USERNAME }}/immich:latest > target_inspect.txt || echo "Target image not found"
+          cat target_inspect.txt
+      - name: Compare source and target image architectures
+        id: compare-images
+        run: |
+          if diff source_inspect.txt target_inspect.txt > /dev/null; then
+            echo "Architectures match"
+            echo "match=true" >> $GITHUB_ENV
           else
-            echo "No images.txt found!"
-            exit 1
+            echo "Architectures do not match"
+            echo "match=false" >> $GITHUB_ENV
           fi
-
-      - name: Create buildx instance
+      - name: Pull and push multi-architecture image if needed
+        if: env.match == 'false'
         run: |
-          docker buildx create --use
-
-      - name: Process each image
-        run: |
-          for IMAGE in $IMAGES; do
-            echo "Processing $IMAGE"
-
-            # Extract image name without registry path
-            IMAGE_NAME=$(echo $IMAGE | awk -F'/' '{print $NF}')
-
-            # Construct target image name
-            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME"
-
-            echo "Source Image: $IMAGE"
-            echo "Target Image: $TARGET_IMAGE"
-
-            # Check if target image exists
-            if ! docker manifest inspect $TARGET_IMAGE > /dev/null 2>&1; then
-              echo "Target image $TARGET_IMAGE does not exist, pushing first..."
-              # Log in to Docker Hub for pushing
-              echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-              docker pull $IMAGE
-              docker tag $IMAGE $TARGET_IMAGE
-              docker push $TARGET_IMAGE
-            else
-              echo "Target image $TARGET_IMAGE exists, comparing architectures..."
-              # Inspect source image architectures
-              docker buildx imagetools inspect $IMAGE > source_inspect.txt
-
-              # Inspect target image architectures
-              docker buildx imagetools inspect $TARGET_IMAGE > target_inspect.txt
-
-              # Compare architectures
-              if diff source_inspect.txt target_inspect.txt > /dev/null; then
-                echo "Architectures match for $IMAGE"
-              else
-                echo "Architectures do not match for $IMAGE, updating..."
-                # Log in to Docker Hub for pushing
-                echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-                # Pull all architectures of the source image
-                docker buildx imagetools create --tag temp/$IMAGE_NAME $IMAGE
-
-                # Push all architectures to the target image
-                docker buildx imagetools create --tag $TARGET_IMAGE temp/$IMAGE_NAME
-                docker buildx imagetools rm temp/$IMAGE_NAME
-              fi
-            fi
-          done
-
-      - name: Push multi-architecture manifest
-        run: |
-          for IMAGE in $IMAGES; do
-            IMAGE_NAME=$(echo $IMAGE | awk -F'/' '{print $NF}')
-            TARGET_IMAGE="${{ secrets.DOCKER_USERNAME }}/$IMAGE_NAME"
-
-            echo "Creating and pushing manifest for $TARGET_IMAGE"
-            docker buildx imagetools create --tag $TARGET_IMAGE $TARGET_IMAGE
-          done
+          echo "Pulling and pushing multi-architecture image"
+          docker buildx imagetools create \
+            --tag ${{ secrets.DOCKER_USERNAME }}/immich:latest \
+            ghcr.io/imagegenius/immich:latest
