@@ -73,8 +73,12 @@ jobs:
                 echo "Architectures match for $IMAGE"
               else
                 echo "Architectures do not match for $IMAGE, updating..."
-                # Pull and push multi-architecture image
-                docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 --pull --tag $TARGET_IMAGE --push $IMAGE
+                # Pull all architectures of the source image
+                docker buildx imagetools create --tag temp/$IMAGE_NAME $IMAGE
+
+                # Push all architectures to the target image
+                docker buildx imagetools create --tag $TARGET_IMAGE temp/$IMAGE_NAME
+                docker buildx imagetools rm temp/$IMAGE_NAME
               fi
             fi
           done
