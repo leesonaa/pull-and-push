@@ -36,6 +36,10 @@ jobs:
             exit 1
           fi
 
+      - name: Create buildx instance
+        run: |
+          docker buildx create --use
+
       - name: Process each image
         run: |
           for IMAGE in $IMAGES; do
@@ -70,9 +74,7 @@ jobs:
               else
                 echo "Architectures do not match for $IMAGE, updating..."
                 # Pull and push multi-architecture image
-                docker pull $IMAGE
-                docker tag $IMAGE $TARGET_IMAGE
-                docker push $TARGET_IMAGE
+                docker buildx build --platform linux/amd64,linux/arm64,linux/arm/v7 --pull --tag $TARGET_IMAGE --push $IMAGE
               fi
             fi
           done
