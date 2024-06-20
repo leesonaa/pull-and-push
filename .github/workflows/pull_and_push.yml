@@ -68,7 +68,9 @@ jobs:
               else
                 echo "Architectures do not match for $IMAGE, updating..."
                 # Pull and push multi-architecture image
-                docker buildx build --pull -t $TARGET_IMAGE --push $IMAGE
+                docker pull $IMAGE
+                docker tag $IMAGE $TARGET_IMAGE
+                docker push $TARGET_IMAGE
               fi
             fi
           done
