@@ -3,7 +3,8 @@ on:
   push:
     branches:
       - main 
-
+  schedule:
+    - cron: '0 16 * * *'
 jobs:
   sync-image:
     runs-on: ubuntu-latest
@@ -20,6 +21,11 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: rm all images
+        run: |
+          docker images
+          docker rmi $(docker images -q)
 
       - name: Inspect source image architectures
         id: source-inspect
