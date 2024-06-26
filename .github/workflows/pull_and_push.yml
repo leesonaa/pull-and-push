@@ -6,12 +6,12 @@ on:
   schedule:
     - cron: '0 16 * * *'
 jobs:
-  sync-image:
+  sync-immich-image:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@main
 
       - name: rm all images
         run: |
@@ -20,12 +20,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Inspect source image architectures
         id: source-inspect
@@ -47,6 +41,13 @@ jobs:
             echo "Architectures do not match"
             echo "match=false" >> $GITHUB_ENV
           fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
       - name: Pull and push multi-architecture image if needed
         if: env.match == 'false'
         run: |
@@ -54,3 +55,56 @@ jobs:
           docker buildx imagetools create \
             --tag ${{ secrets.DOCKER_USERNAME }}/immich:latest \
             ghcr.io/imagegenius/immich:latest
+
+
+  sync-singbox-image:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@main
+
+      - name: rm all images
+        run: |
+          docker images
+          docker rmi -f $(docker images -q)
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+
+
+      - name: Inspect source image architectures
+        id: source-inspect
+        run: |
+          docker buildx imagetools inspect ghcr.io/sagernet/sing-box:latest > source_inspect.txt
+          cat source_inspect.txt
+      - name: Inspect target image architectures
+        id: target-inspect
+        run: |
+          docker buildx imagetools inspect ${{ secrets.DOCKER_USERNAME }}/sing-box:latest > target_inspect.txt || echo "Target image not found"
+          cat target_inspect.txt
+      - name: Compare source and target image architectures
+        id: compare-images
+        run: |
+          if diff source_inspect.txt target_inspect.txt > /dev/null; then
+            echo "Architectures match"
+            echo "match=true" >> $GITHUB_ENV
+          else
+            echo "Architectures do not match"
+            echo "match=false" >> $GITHUB_ENV
+          fi
+          
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          
+      - name: Pull and push multi-architecture image if needed
+        if: env.match == 'false'
+        run: |
+          echo "Pulling and pushing multi-architecture image"
+          docker buildx imagetools create \
+            --tag ${{ secrets.DOCKER_USERNAME }}/sing-box:latest \
+            ghcr.io/sagernet/sing-box:latest
