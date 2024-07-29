@@ -1,0 +1,35 @@
+name: Monitor sing-box releases
+
+on:
+  schedule:
+    - cron: '0 16 * * *'  
+
+jobs:
+  monitor_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2  
+
+      - name: Get latest version
+        id: get_latest_version
+        run: |
+          latest_tag=$(curl -sSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r '.tag_name')
+          echo "Latest version: $latest_tag"
+          echo "$latest_tag" > version  
+
+      - name: Compare versions and commit if different
+        if: steps.get_latest_version.outputs.version != steps.check_local_version.outputs.version
+        id: compare_versions
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Actions"
+          git add version
+          git commit -m "Update version file with latest sing-box version"
+          git push
+
+      - name: Check local version
+        id: check_local_version
+        run: echo "::set-output name=version::$(cat version)"
+
