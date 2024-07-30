@@ -19,7 +19,7 @@ jobs:
         run: |
           latest_tag=$(curl -sSL https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r '.tag_name' | tr -d "v")
           echo "Latest version: $latest_tag" 
-          if [[ "$latest_tag" != "$(cat version)" ]];then
+          if [[ "$latest_tag" != `cat version` ]];then
             echo "$latest_tag" > version 
             git config --local user.email "actions@github.com"
             git config --local user.name "GitHub Actions"
