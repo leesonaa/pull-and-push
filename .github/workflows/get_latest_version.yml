@@ -1,5 +1,4 @@
 name: Get sing-box releases
-permissions: write-all
 on:
   push:
     branches:
