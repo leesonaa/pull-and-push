@@ -1,10 +1,9 @@
 name: Sync gdy666/lucky Image
 on:
   push:
-    branches:
-      - main 
+    - cron: '0 16 * * *'
 jobs:
-  sync-immich-image:
+  sync-kucky-image:
     runs-on: ubuntu-latest
 
     steps:
@@ -17,7 +16,7 @@ jobs:
           docker rmi -f $(docker images -q)
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
 
       - name: Inspect source image architectures
         id: source-inspect
