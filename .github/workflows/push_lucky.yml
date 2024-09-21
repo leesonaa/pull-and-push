@@ -1,6 +1,6 @@
 name: Sync gdy666/lucky Image
 on:
-  push:
+  schedule:
     - cron: '0 16 * * *'
 jobs:
   sync-kucky-image:
