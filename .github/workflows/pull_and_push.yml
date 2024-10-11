@@ -61,10 +61,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@main
 
-      - name: rm all images
-        run: |
-          docker images
-          docker rmi -f $(docker images -q)
+#      - name: rm all images
+#        run: |
+#          docker images
+#          docker rmi -f $(docker images -q)
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
