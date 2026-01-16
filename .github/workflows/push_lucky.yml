@@ -22,12 +22,12 @@ jobs:
       - name: Inspect source image architectures
         id: source-inspect
         run: |
-          docker buildx imagetools inspect gdy666/lucky:latest > source_inspect.txt
+          docker buildx imagetools inspect gdy666/lucky:v2 > source_inspect.txt
           cat source_inspect.txt
       - name: Inspect target image architectures
         id: target-inspect
         run: |
-          docker buildx imagetools inspect registry.cn-hangzhou.aliyuncs.com/gdy66/lucky:latest > target_inspect.txt || echo "Target image not found"
+          docker buildx imagetools inspect registry.cn-hangzhou.aliyuncs.com/gdy66/lucky:v2 > target_inspect.txt || echo "Target image not found"
           cat target_inspect.txt
       - name: Compare source and target image architectures
         id: compare-images
@@ -51,5 +51,5 @@ jobs:
         run: |
           echo "Pulling and pushing multi-architecture image"
           docker buildx imagetools create \
-            --tag registry.cn-hangzhou.aliyuncs.com/gdy66/lucky:latest \
-            gdy666/lucky:latest
+            --tag registry.cn-hangzhou.aliyuncs.com/gdy66/lucky:v2 \
+            gdy666/lucky:v2
