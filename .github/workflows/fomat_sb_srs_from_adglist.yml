@@ -1,0 +1,39 @@
+name: Update Sing-Box Rule Set
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天 UTC 0点自动运行
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install sing-box
+        run: |
+          # 获取最新版本并安装
+          TAG=$(curl -s https://api.github.com/repos/SagerNet/sing-box/releases/latest | jq -r .tag_name)
+          VERSION=${TAG#v}
+          wget https://github.com/SagerNet/sing-box/releases/download/$TAG/sing-box-$VERSION-linux-amd64.tar.gz
+          tar -xvf sing-box-$VERSION-linux-amd64.tar.gz
+          sudo mv sing-box-$VERSION-linux-amd64/sing-box /usr/local/bin/
+
+      - name: Download and Convert
+        run: |
+          # 下载原始 AdGuard 规则
+          curl -Lo ads.txt https://raw.githubusercontent.com/TG-Twilight/AWAvenue-Ads-Rule/refs/heads/main/Filters/AWAvenue-Ads-Rule-Adguard.txt
+          
+          # 转换为 sing-box 二进制格式
+          # 注意：sing-box convert 会自动忽略它不支持的 CSS 规则
+          sing-box rule-set convert --type adguard --output ads.srs ads.txt
+
+      - name: Push to Repository
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add ads.srs
+          git commit -m "Update ads.srs" || exit 0
+          git push
