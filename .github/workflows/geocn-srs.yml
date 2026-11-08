@@ -1,0 +1,140 @@
+name: Build GeoCN srs
+
+on:
+  schedule:
+    - cron: "17 2 * * *"   # 每天 UTC 02:17(北京时间 10:17)检查一次上游
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "即使上游版本没变也强制重新生成"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: geocn-srs
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: ljxi/GeoCN
+  OUT_DIR: rule-set
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check upstream release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh api "repos/${UPSTREAM}/releases/latest" --jq .tag_name)
+          echo "upstream tag: $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          old=""
+          [ -f "${OUT_DIR}/VERSION" ] && old=$(cat "${OUT_DIR}/VERSION")
+          if [ "$old" = "$tag" ] && [ "${{ inputs.force }}" != "true" ] && [ -f "${OUT_DIR}/geocn.srs" ]; then
+            echo "up-to-date ($tag), skip"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download geocn.mmdb
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          gh release download "${{ steps.check.outputs.tag }}" -R "$UPSTREAM" \
+            -p '*.mmdb' -D work --clobber
+          mv work/*.mmdb work/geocn.mmdb
+          ls -l work
+
+      - name: Install sing-box (latest stable)
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p sb
+          gh release download -R SagerNet/sing-box \
+            -p 'sing-box-*-linux-amd64.tar.gz' -D sb --clobber
+          tar -xzf sb/sing-box-*-linux-amd64.tar.gz -C sb --strip-components=1
+          sudo install -m 0755 sb/sing-box /usr/local/bin/sing-box
+          sing-box version
+
+      - name: Convert mmdb -> json -> srs
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          pip install -q maxminddb
+
+          cat > work/mk.py <<'PY'
+          import sys, json, ipaddress, maxminddb
+          src, dst = sys.argv[1], sys.argv[2]
+          r = maxminddb.open_database(src)
+          v4, v6 = [], []
+          for net, _ in r:
+              (v4 if net.version == 4 else v6).append(net)
+          v4 = list(ipaddress.collapse_addresses(v4))
+          v6 = list(ipaddress.collapse_addresses(v6))
+          cidrs = [str(n) for n in v4] + [str(n) for n in v6]
+          assert len(v4) > 1000 and len(v6) > 100, "suspiciously small result"
+          json.dump({"version": 3, "rules": [{"ip_cidr": cidrs}]}, open(dst, "w"))
+          print("v4:", len(v4), "v6:", len(v6))
+          PY
+
+          mkdir -p "${OUT_DIR}"
+          python3 -I work/mk.py work/geocn.mmdb "${OUT_DIR}/geocn.json"
+          sing-box rule-set compile "${OUT_DIR}/geocn.json" -o "${OUT_DIR}/geocn.srs"
+
+          # 校验:反编译后条数应一致
+          sing-box rule-set decompile "${OUT_DIR}/geocn.srs" -o work/check.json
+          python3 -I - <<'PY'
+          import json
+          a = json.load(open("work/check.json"))["rules"][0]["ip_cidr"]
+          b = json.load(open("rule-set/geocn.json"))["rules"][0]["ip_cidr"]
+          assert len(a) == len(b), (len(a), len(b))
+          print("verified", len(a), "cidrs")
+          PY
+
+          echo "${{ steps.check.outputs.tag }}" > "${OUT_DIR}/VERSION"
+          sha256sum "${OUT_DIR}/geocn.srs"
+
+      - name: Commit changes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${OUT_DIR}"
+          if git diff --cached --quiet; then
+            echo "nothing to commit"
+          else
+            git commit -m "chore: update geocn.srs (${{ steps.check.outputs.tag }})"
+            git push
+          fi
+
+      - name: Publish rolling release
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! gh release view latest >/dev/null 2>&1; then
+            gh release create latest --title "latest" \
+              --notes "Rolling release, auto-built from ${UPSTREAM}"
+          fi
+          gh release upload latest \
+            "${OUT_DIR}/geocn.srs" "${OUT_DIR}/geocn.json" --clobber
+          gh release edit latest \
+            --notes "Auto-built from ${UPSTREAM} ${{ steps.check.outputs.tag }} ($(date -u +%F))"
