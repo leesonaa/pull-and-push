@@ -94,12 +94,12 @@ jobs:
           PY
 
           mkdir -p "${OUT_DIR}"
-          python3 -I work/mk.py work/geocn.mmdb "${OUT_DIR}/geocn.json"
+          python3 work/mk.py work/geocn.mmdb "${OUT_DIR}/geocn.json"
           sing-box rule-set compile "${OUT_DIR}/geocn.json" -o "${OUT_DIR}/geocn.srs"
 
           # 校验:反编译后条数应一致
           sing-box rule-set decompile "${OUT_DIR}/geocn.srs" -o work/check.json
-          python3 -I - <<'PY'
+          python3 - <<'PY'
           import json
           a = json.load(open("work/check.json"))["rules"][0]["ip_cidr"]
           b = json.load(open("rule-set/geocn.json"))["rules"][0]["ip_cidr"]
